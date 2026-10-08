@@ -46,12 +46,6 @@ The app syncs PDF and common image files in the private repository's `/files` fo
 
 Generate a replacement fine-grained token with the same repository scope, **Contents: Read and write**, and a one-year expiry. In Settings, enter the new token and select **Save sync settings**, then **Test connection**. If GitHub revokes the old token, pending local changes remain stored until a valid token is entered and sync succeeds. The app never logs token contents.
 
-## Install on devices
-
-- **iPhone/iPad (iOS 16+):** open the HTTPS Pages URL in Safari, tap **Share → Add to Home Screen**, and confirm. Launch the home-screen icon for standalone mode. Safari must first load the app online to install the service worker and cache the shell.
-- **Android:** open the URL in Chrome. Choose **Install app** / **Add to Home screen** from the browser menu or installation prompt.
-- **Windows:** open the URL in Edge or Chrome. Use the install icon in the address bar or the browser menu's **Install this site as an app** action.
-
 ## Supply and optimize the anatomy model
 
 The app looks for `public/models/anatomy.glb`. Use the original Z-Anatomy distribution and preserve its attribution/license. The procedural scene is intentionally built into the app so the interface remains testable without that asset.
