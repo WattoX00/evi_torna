@@ -93,28 +93,84 @@ async function shareFiles(files: StoredFile[]): Promise<void> {
     catch (error) { if (!(error instanceof DOMException && error.name === 'AbortError')) showMessage('Sharing was not completed.', 'error'); }
     return;
   }
+
+  const desktop = window.matchMedia('(pointer: fine)').matches && !/iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const subject = encodeURIComponent(files.length === 1 ? `Exercise file: ${files[0].name}` : `Exercise files (${files.length})`);
+  const body = encodeURIComponent(
+    `Please find the selected file${files.length === 1 ? '' : 's'} attached to this email.\n\n${files.map((file) => `- ${file.name}`).join('\n')}`
+  );
+
+  if (desktop) {
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${subject}&body=${body}`;
+    const draft = window.open(gmailUrl, '_blank', 'noopener,noreferrer');
+    if (draft) {
+      showMessage('Gmail draft opened. You can attach the selected file(s) from your device.', 'info');
+      return;
+    }
+  }
+
   for (const file of files) downloadBlob(file.data, file.name);
-  const body = encodeURIComponent(`Please attach the downloaded file${files.length === 1 ? '' : 's'} manually.`);
-  window.location.href = `mailto:?subject=Exercise%20files&body=${body}`;
-  showMessage('Files downloaded. Add them to your email manually.');
+  const fallbackBody = encodeURIComponent(`Please attach the downloaded file${files.length === 1 ? '' : 's'} manually.`);
+  if (desktop) {
+    window.location.href = `mailto:?subject=${subject}&body=${fallbackBody}`;
+    showMessage('Downloaded a copy for your email client. Attach the file(s) manually if needed.', 'info');
+    return;
+  }
+
+  window.location.href = `mailto:?subject=Exercise%20files&body=${fallbackBody}`;
+  showMessage('Files downloaded. Add them to your email manually.', 'info');
 }
 
 async function printFile(file: StoredFile): Promise<void> {
-  if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-    await shareFiles([file]);
-    showMessage('Choose Print from the iOS share sheet.');
+  const isMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isMobile) {
+    if (navigator.share && navigator.canShare?.({ files: [new File([file.data], file.name, { type: file.type })] })) {
+      try {
+        await navigator.share({ files: [new File([file.data], file.name, { type: file.type })], title: 'Print file' });
+        showMessage('Choose Print from the sharing sheet.', 'info');
+        return;
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === 'AbortError')) showMessage('Sharing was not completed.', 'error');
+      }
+    }
+    const url = URL.createObjectURL(file.data);
+    const printWindow = window.open(url, '_blank', 'noopener,noreferrer');
+    if (printWindow) {
+      printWindow.focus();
+      window.setTimeout(() => {
+        try { printWindow.print(); }
+        catch { showMessage('Printing was blocked by the browser. Please try again.', 'error'); }
+        window.setTimeout(() => {
+          try { printWindow.close(); }
+          catch { /* no-op */ }
+          URL.revokeObjectURL(url);
+        }, 1200);
+      }, 600);
+      return;
+    }
+    showMessage('Please allow pop-ups to print this file.', 'error');
     return;
   }
-  const url = URL.createObjectURL(file.data);
-  const frame = element('iframe', { attrs: { title: `Print ${file.name}` } });
-  frame.hidden = true;
-  frame.src = url;
-  document.body.append(frame);
-  frame.addEventListener('load', () => {
-    try { frame.contentWindow?.print(); }
-    catch { void shareFiles([file]); }
-    window.setTimeout(() => { frame.remove(); URL.revokeObjectURL(url); }, 60000);
-  }, { once: true });
+
+  const printWindow = window.open('', '_blank', 'noopener,noreferrer');
+  if (!printWindow) {
+    showMessage('Please allow pop-ups to print this file.', 'error');
+    return;
+  }
+
+  const blobUrl = URL.createObjectURL(file.data);
+  printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${file.name}</title></head><body style="margin:0;display:flex;align-items:center;justify-content:center;background:#fff;min-height:100vh;"><img src="${blobUrl}" style="max-width:100%;max-height:100vh;object-fit:contain;" alt="${file.name}"></body></html>`);
+  printWindow.document.close();
+  printWindow.focus();
+  window.setTimeout(() => {
+    try { printWindow.print(); }
+    catch { showMessage('Printing was blocked by the browser. Please try again.', 'error'); }
+    window.setTimeout(() => {
+      try { printWindow.close(); }
+      catch { /* no-op */ }
+      URL.revokeObjectURL(blobUrl);
+    }, 1200);
+  }, 300);
 }
 
 function createCard(file: StoredFile): HTMLElement {
