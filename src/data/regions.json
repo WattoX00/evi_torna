@@ -1,0 +1,13 @@
+{
+  "Head & Neck": ["skull", "cranium", "mandible", "maxilla", "cervical vertebra", "atlas", "axis", "sternocleidomastoid", "trapezius", "masseter", "temporalis", "orbicularis oculi", "orbicularis oris", "frontalis", "occipitalis", "platysma", "scalene", "splenius capitis", "levator scapulae"],
+  "Shoulders": ["clavicle", "scapula", "acromion", "humerus", "deltoid", "supraspinatus", "infraspinatus", "teres minor", "teres major", "subscapularis", "trapezius", "rhomboid", "serratus anterior", "pectoralis minor"],
+  "Chest": ["sternum", "rib", "costal cartilage", "thoracic vertebra", "pectoralis major", "pectoralis minor", "intercostal", "serratus anterior", "diaphragm", "rectus thoracis"],
+  "Upper Arm": ["humerus", "biceps brachii", "brachialis", "coracobrachialis", "triceps brachii", "anconeus"],
+  "Forearm & Hand": ["radius", "ulna", "carpal", "metacarpal", "phalange", "flexor carpi", "extensor carpi", "flexor digitorum", "extensor digitorum", "pronator", "supinator", "brachioradialis", "thenar", "hypothenar", "lumbrical", "interossei", "palmaris longus"],
+  "Back": ["thoracic vertebra", "lumbar vertebra", "sacrum", "scapula", "trapezius", "latissimus dorsi", "rhomboid", "erector spinae", "multifidus", "quadratus lumborum", "teres major", "infraspinatus", "splenius", "semispinalis"],
+  "Core/Abdomen": ["lumbar vertebra", "rib", "rectus abdominis", "external oblique", "internal oblique", "transversus abdominis", "quadratus lumborum", "psoas major", "iliacus", "linea alba"],
+  "Hips & Glutes": ["pelvis", "ilium", "ischium", "pubis", "sacrum", "femur", "hip bone", "gluteus maximus", "gluteus medius", "gluteus minimus", "tensor fasciae latae", "piriformis", "obturator", "gemellus", "quadratus femoris", "iliopsoas"],
+  "Thigh": ["femur", "patella", "quadriceps", "rectus femoris", "vastus lateralis", "vastus medialis", "vastus intermedius", "sartorius", "gracilis", "adductor", "biceps femoris", "semitendinosus", "semimembranosus", "iliotibial"],
+  "Lower Leg": ["tibia", "fibula", "patella", "gastrocnemius", "soleus", "tibialis anterior", "tibialis posterior", "fibularis", "peroneus", "extensor hallucis", "flexor hallucis", "popliteus", "plantaris"],
+  "Foot": ["tarsal", "calcaneus", "talus", "navicular", "cuboid", "cuneiform", "metatarsal", "phalange", "flexor digitorum brevis", "abductor hallucis", "abductor digiti minimi", "quadratus plantae", "lumbrical", "interossei", "extensor digitorum brevis"]
+}
