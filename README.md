@@ -80,8 +80,7 @@ If you use the optimized output, rename it to `anatomy.glb`. The viewer register
 ## Known iOS PWA limitations and handling
 
 - **Storage eviction:** iOS may evict website data when storage is low or the app is unused. The app requests persistent storage when available, reports quota/usage, and provides ZIP export/import. Persistence is a browser decision and cannot be guaranteed.
-- **Share sheet:** Safari standalone support for sharing file attachments varies by iOS version and file type. The app checks `navigator.canShare({ files })` and uses the native sheet when supported; otherwise it downloads the files and opens a mail draft asking the user to attach them manually.
-- **Printing:** direct printing from a hidden iframe is unreliable in iOS standalone mode. iOS uses the native share sheet so the user can choose **Print**; other supported browsers print through a temporary iframe.
+- **Sharing:** on phones and tablets, Share and Print open the operating system's native share sheet with the file contents; choose a destination, or choose **Print** for printing. If the browser cannot share the file, the app reports the problem. On desktop, Share opens the default mail app with the file name and asks you to attach the file manually, while Print opens the file in a new tab.
 - **Background/update behavior:** iOS may suspend background work and service-worker updates until the app is foregrounded and online. Sync queues changes locally and retries after connectivity returns.
 - **Offline model storage:** large GLB files take time to cache and use device quota. Keep the model below 25 MB and open the app online once after each deployment.
 

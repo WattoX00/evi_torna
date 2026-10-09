@@ -17,8 +17,9 @@ function syncLabel(file: StoredFile): string {
   return file.syncState === 'synced' ? 'Synced' : file.syncState === 'pending' ? 'Pending sync' : file.syncState === 'error' ? 'Sync error' : 'Local only';
 }
 
-function isIOS(): boolean {
-  return /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+function isMobileDevice(): boolean {
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
 
 async function showPreview(file: StoredFile): Promise<void> {
@@ -139,6 +140,10 @@ async function showPreview(file: StoredFile): Promise<void> {
 
 function shareFiles(files: StoredFile[]): void {
   if (!files.length) return;
+  if (isMobileDevice()) {
+    void shareWithNativeSheet(files, files.length === 1 ? files[0].name : `${files.length} exercise files`);
+    return;
+  }
   const subject = files.length === 1 ? `Exercise file: ${files[0].name}` : `Exercise files (${files.length})`;
   const body = `Files to attach:\r\n\r\n${files.map((file) => `- ${file.name}`).join('\r\n')}\r\n`;
   const link = document.createElement('a');
@@ -149,15 +154,23 @@ function shareFiles(files: StoredFile[]): void {
   showMessage(`Your mail app was opened. Please attach the file${files.length === 1 ? '' : 's'} manually.`, 'info');
 }
 
-async function iosShareSheet(file: StoredFile): Promise<boolean> {
-  const shareable = new File([file.data], file.name, { type: file.type });
-  if (!navigator.share || !navigator.canShare?.({ files: [shareable] })) return false;
+async function shareWithNativeSheet(files: StoredFile[], title: string): Promise<void> {
+  if (!navigator.share || !navigator.canShare) {
+    showMessage('File sharing is not supported by this browser.', 'error');
+    return;
+  }
   try {
-    await navigator.share({ files: [shareable], title: 'Print file' });
-    showMessage('Choose Print from the sharing sheet.', 'info');
-    return true;
+    const shareable = await Promise.all(files.map(async (file) =>
+      new File([await file.data.arrayBuffer()], file.name, { type: file.type })
+    ));
+    if (!navigator.canShare({ files: shareable })) {
+      showMessage('This browser cannot share these files.', 'error');
+      return;
+    }
+    await navigator.share({ files: shareable, title });
   } catch (error) {
-    return error instanceof DOMException && error.name === 'AbortError';
+    if (error instanceof DOMException && error.name === 'AbortError') return;
+    showMessage(error instanceof Error ? error.message : 'Could not share these files.', 'error');
   }
 }
 
@@ -178,8 +191,9 @@ function openInTab(file: StoredFile): void {
 }
 
 function printFile(file: StoredFile): void {
-  if (isIOS()) {
-    void iosShareSheet(file).then((handled) => { if (!handled) openInTab(file); });
+  if (isMobileDevice()) {
+    showMessage('Choose Print from the sharing sheet.', 'info');
+    void shareWithNativeSheet([file], file.name);
     return;
   }
   openInTab(file);
