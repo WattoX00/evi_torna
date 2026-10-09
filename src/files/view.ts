@@ -182,9 +182,7 @@ function shareWithNativeSheet(files: StoredFile[], title: string): void {
 }
 
 function openInTab(file: StoredFile): void {
-  const blob = typedFileBlob(file);
-const url = URL.createObjectURL(blob);
-const tab = window.open('', '_blank');
+  const url = URL.createObjectURL(typedFileBlob(file));
 
 if (tab) {
   tab.location.href = url;
