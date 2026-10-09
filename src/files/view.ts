@@ -179,7 +179,7 @@ function shareWithNativeSheet(files: StoredFile[], title: string): void {
     if (error instanceof DOMException && error.name === 'AbortError') return;
     showMessage(error instanceof Error ? error.message : 'Could not share these files.', 'error');
   }
-}
+}asd
 
 function openInTab(file: StoredFile): void {
   const url = URL.createObjectURL(typedFileBlob(file));
