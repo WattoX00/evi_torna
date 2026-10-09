@@ -1,5 +1,6 @@
 import type { GitHubConfig, StoredFile } from '../types';
 import { getFile, getGitHubConfig, getSetting, listFiles, removeFile, saveFile, setSetting } from '../data/db';
+import { fileMimeType } from '../files/mime';
 
 interface RemoteEntry {
   name: string;
@@ -173,7 +174,7 @@ async function syncFilesInternal(): Promise<void> {
         const record: StoredFile = {
           id: local?.id ?? crypto.randomUUID(),
           name: entry.name,
-          type: data.type || (entry.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream'),
+          type: fileMimeType(entry.name, data.type),
           size: data.size,
           modified: Date.now(),
           data,

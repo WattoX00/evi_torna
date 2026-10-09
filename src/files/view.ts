@@ -3,6 +3,7 @@ import type { StoredFile } from '../types';
 import { button, confirmAction, element, showMessage } from '../ui/dom';
 import { syncFiles, removeSyncedFile } from '../sync/github';
 import { addLocalFiles, downloadBlob, exportZip, importZip } from './operations';
+import { fileMimeType, typedFileBlob } from './mime';
 
 const selected = new Set<string>();
 let selectMode = false;
@@ -23,7 +24,9 @@ function isMobileDevice(): boolean {
 }
 
 async function showPreview(file: StoredFile): Promise<void> {
-  const isPdf = file.type === 'application/pdf';
+  const type = fileMimeType(file.name, file.type || file.data.type);
+  const data = typedFileBlob(file);
+  const isPdf = type === 'application/pdf';
   const pdfTools = isPdf ? import('./pdf') : undefined;
 
   const dialog = element('dialog', { className: 'preview-dialog' });
@@ -57,12 +60,12 @@ async function showPreview(file: StoredFile): Promise<void> {
   const renderCurrent = async (): Promise<void> => {
     if (isPdf) {
       const tools = await pdfTools!;
-      count = await tools.renderPdfPage(file.data, page, canvas, scale);
+      count = await tools.renderPdfPage(data, page, canvas, scale);
       label.textContent = `Page ${page} of ${count}`;
       return;
     }
     const image = new Image();
-    const url = URL.createObjectURL(file.data);
+    const url = URL.createObjectURL(data);
     try {
       image.src = url;
       await image.decode();
@@ -144,30 +147,34 @@ function shareFiles(files: StoredFile[]): void {
     void shareWithNativeSheet(files, files.length === 1 ? files[0].name : `${files.length} exercise files`);
     return;
   }
+  for (const file of files) downloadBlob(typedFileBlob(file), file.name);
   const subject = files.length === 1 ? `Exercise file: ${files[0].name}` : `Exercise files (${files.length})`;
-  const body = `Files to attach:\r\n\r\n${files.map((file) => `- ${file.name}`).join('\r\n')}\r\n`;
+  const body = `Downloaded file${files.length === 1 ? '' : 's'} to attach:\r\n\r\n${files.map((file) => `- ${file.name}`).join('\r\n')}\r\n`;
   const link = document.createElement('a');
   link.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   document.body.append(link);
   link.click();
   link.remove();
-  showMessage(`Your mail app was opened. Please attach the file${files.length === 1 ? '' : 's'} manually.`, 'info');
+  showMessage(`Downloaded ${files.length === 1 ? 'the file' : 'the files'} and opened your mail app. Attach the downloaded file${files.length === 1 ? '' : 's'} manually.`, 'info');
 }
 
-async function shareWithNativeSheet(files: StoredFile[], title: string): Promise<void> {
+function shareWithNativeSheet(files: StoredFile[], title: string): void {
   if (!navigator.share || !navigator.canShare) {
     showMessage('File sharing is not supported by this browser.', 'error');
     return;
   }
   try {
-    const shareable = await Promise.all(files.map(async (file) =>
-      new File([await file.data.arrayBuffer()], file.name, { type: file.type })
-    ));
+    const shareable = files.map((file) =>
+      new File([typedFileBlob(file)], file.name, { type: fileMimeType(file.name, file.type || file.data.type) })
+    );
     if (!navigator.canShare({ files: shareable })) {
       showMessage('This browser cannot share these files.', 'error');
       return;
     }
-    await navigator.share({ files: shareable, title });
+    void navigator.share({ files: shareable, title }).catch((error: unknown) => {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      showMessage(error instanceof Error ? error.message : 'Could not share these files.', 'error');
+    });
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') return;
     showMessage(error instanceof Error ? error.message : 'Could not share these files.', 'error');
@@ -175,8 +182,7 @@ async function shareWithNativeSheet(files: StoredFile[], title: string): Promise
 }
 
 function openInTab(file: StoredFile): void {
-  const type = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : '');
-  const url = URL.createObjectURL(new Blob([file.data], { type }));
+  const url = URL.createObjectURL(typedFileBlob(file));
   const tab = window.open(url, '_blank');
   if (!tab) {
     URL.revokeObjectURL(url);
@@ -215,16 +221,16 @@ function createCard(file: StoredFile): HTMLElement {
     const image = element('img', { attrs: { alt: '', loading: 'lazy' } });
     image.src = URL.createObjectURL(file.thumbnail);
     preview.append(image);
-  } else if (file.type.startsWith('image/')) {
+  } else if (fileMimeType(file.name, file.type || file.data.type).startsWith('image/')) {
     const image = element('img', { attrs: { alt: '', loading: 'lazy' } });
-    image.src = URL.createObjectURL(file.data);
+    image.src = URL.createObjectURL(typedFileBlob(file));
     preview.append(image);
   } else {
     preview.append(element('span', { className: 'pdf-glyph', text: 'PDF' }));
     const observer = new IntersectionObserver((entries) => {
       if (!entries[0]?.isIntersecting || file.thumbnail) return;
       observer.disconnect();
-      void import('./pdf').then(async ({ cachedThumbnail, createThumbnail }) => (await cachedThumbnail(file.id)) ?? createThumbnail(file.data)).then(async (thumbnail) => {
+      void import('./pdf').then(async ({ cachedThumbnail, createThumbnail }) => (await cachedThumbnail(file.id)) ?? createThumbnail(typedFileBlob(file))).then(async (thumbnail) => {
         if (!thumbnail) return;
         await saveFile({ ...file, thumbnail });
         const { cacheThumbnail } = await import('./pdf');
