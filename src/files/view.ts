@@ -184,10 +184,12 @@ function shareWithNativeSheet(files: StoredFile[], title: string): void {
 function openInTab(file: StoredFile): void {
   const url = URL.createObjectURL(typedFileBlob(file));
 
-if (tab) {
-  tab.location.href = url;
+const tab = window.open(url, '_blank');
+if (!tab) {
+  URL.revokeObjectURL(url);
+  showMessage('Please allow pop-ups to open this file.', 'error');
+  return;
 }
-  const tab = window.open(url, '_blank');
   if (!tab) {
     URL.revokeObjectURL(url);
     showMessage('Please allow pop-ups to open this file.', 'error');
