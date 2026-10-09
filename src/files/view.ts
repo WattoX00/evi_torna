@@ -7,6 +7,7 @@ import { addLocalFiles, downloadBlob, exportZip, importZip } from './operations'
 const selected = new Set<string>();
 let selectMode = false;
 let query = '';
+let loadedFiles: StoredFile[] = [];
 
 function sizeLabel(size: number): string {
   return size < 1024 * 1024 ? `${(size / 1024).toFixed(0)} KB` : `${(size / (1024 * 1024)).toFixed(1)} MB`;
@@ -30,35 +31,64 @@ async function showPreview(file: StoredFile): Promise<void> {
   let page = 1;
   let count = 1;
   let scale = 1;
-  const label = element('span', { text: 'Page 1' });
+  let controlButtons: HTMLButtonElement[] = [];
+  let isDrawing = false;
+  let redrawRequested = false;
+  const label = element('span', { text: 'Loading file…' });
   const draw = async () => {
+    if (isDrawing) {
+      redrawRequested = true;
+      return;
+    }
+    isDrawing = true;
+    controlButtons.forEach((control) => { control.disabled = true; });
     try {
-      if (file.type === 'application/pdf') {
-        if (!pdfTools) return;
-        count = await (await pdfTools).renderPdfPage(file.data, page, canvas, scale);
-        label.textContent = `Page ${page} of ${count}`;
-      } else {
-        const image = new Image();
-        image.src = URL.createObjectURL(file.data);
-        await image.decode();
-        canvas.width = image.naturalWidth;
-        canvas.height = image.naturalHeight;
-        canvas.style.width = `${Math.min(image.naturalWidth, window.innerWidth - 32) * scale}px`;
-        canvas.style.height = 'auto';
-        canvas.getContext('2d')?.drawImage(image, 0, 0);
-        URL.revokeObjectURL(image.src);
-        label.textContent = 'Image';
+      do {
+        redrawRequested = false;
+        if (file.type === 'application/pdf') {
+          if (!pdfTools) throw new Error('PDF preview is unavailable.');
+          count = await (await pdfTools).renderPdfPage(file.data, page, canvas, scale);
+          label.textContent = `Page ${page} of ${count}`;
+        } else {
+          const image = new Image();
+          const imageUrl = URL.createObjectURL(file.data);
+          try {
+            image.src = imageUrl;
+            await image.decode();
+            canvas.width = image.naturalWidth;
+            canvas.height = image.naturalHeight;
+            canvas.style.width = `${Math.min(image.naturalWidth, window.innerWidth - 32) * scale}px`;
+            canvas.style.height = 'auto';
+            const context = canvas.getContext('2d');
+            if (!context) throw new Error('Canvas is unavailable.');
+            context.drawImage(image, 0, 0);
+            label.textContent = 'Image';
+          } finally {
+            URL.revokeObjectURL(imageUrl);
+          }
+        }
       }
+      while (redrawRequested);
     } catch (error) {
       showMessage(error instanceof Error ? error.message : 'Unable to render this file.', 'error');
+      label.textContent = 'Unable to load file.';
+    } finally {
+      isDrawing = false;
+      controlButtons.forEach((control) => { control.disabled = false; });
     }
   };
-  controls.append(
+  controlButtons = [
     button('−', () => { scale = Math.max(0.55, scale - 0.2); void draw(); }, 'button button-secondary'),
-    label,
     button('+', () => { scale = Math.min(3, scale + 0.2); void draw(); }, 'button button-secondary'),
     button('Previous', () => { page = Math.max(1, page - 1); void draw(); }, 'button button-secondary'),
     button('Next', () => { page = Math.min(count, page + 1); void draw(); }, 'button button-secondary')
+  ];
+  controls.append(
+    controlButtons[0],
+    label,
+    controlButtons[1],
+    controlButtons[2],
+    controlButtons[3]
   );
   dialog.append(header, controls, canvasWrap);
   document.body.append(dialog);
@@ -87,38 +117,21 @@ async function showPreview(file: StoredFile): Promise<void> {
 }
 
 async function shareFiles(files: StoredFile[]): Promise<void> {
-  const shareFiles = files.map((file) => new File([file.data], file.name, { type: file.type }));
-  if (navigator.share && navigator.canShare?.({ files: shareFiles })) {
-    try { await navigator.share({ files: shareFiles, title: 'Exercise files' }); }
-    catch (error) { if (!(error instanceof DOMException && error.name === 'AbortError')) showMessage('Sharing was not completed.', 'error'); }
-    return;
-  }
-
-  const desktop = window.matchMedia('(pointer: fine)').matches && !/iPhone|iPad|iPod/i.test(navigator.userAgent);
-  const subject = encodeURIComponent(files.length === 1 ? `Exercise file: ${files[0].name}` : `Exercise files (${files.length})`);
-  const body = encodeURIComponent(
-    `Please find the selected file${files.length === 1 ? '' : 's'} attached to this email.\n\n${files.map((file) => `- ${file.name}`).join('\n')}`
-  );
-
-  if (desktop) {
-    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${subject}&body=${body}`;
-    const draft = window.open(gmailUrl, '_blank', 'noopener,noreferrer');
-    if (draft) {
-      showMessage('Gmail draft opened. You can attach the selected file(s) from your device.', 'info');
-      return;
+  const attachments = files.map((file) => new File([file.data], file.name, { type: file.type }));
+  if (navigator.share && navigator.canShare?.({ files: attachments })) {
+    try {
+      await navigator.share({ files: attachments, title: 'Exercise files' });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      for (const file of files) downloadBlob(file.data, file.name);
+      const reason = error instanceof Error ? error.message : 'Sharing was not completed.';
+      showMessage(`${reason} The selected file(s) were downloaded instead.`, 'error');
     }
+    return;
   }
 
   for (const file of files) downloadBlob(file.data, file.name);
-  const fallbackBody = encodeURIComponent(`Please attach the downloaded file${files.length === 1 ? '' : 's'} manually.`);
-  if (desktop) {
-    window.location.href = `mailto:?subject=${subject}&body=${fallbackBody}`;
-    showMessage('Downloaded a copy for your email client. Attach the file(s) manually if needed.', 'info');
-    return;
-  }
-
-  window.location.href = `mailto:?subject=Exercise%20files&body=${fallbackBody}`;
-  showMessage('Files downloaded. Add them to your email manually.', 'info');
+  showMessage('This browser cannot share file attachments. The selected file(s) were downloaded.', 'info');
 }
 
 async function printFile(file: StoredFile): Promise<void> {
@@ -130,47 +143,26 @@ async function printFile(file: StoredFile): Promise<void> {
         showMessage('Choose Print from the sharing sheet.', 'info');
         return;
       } catch (error) {
-        if (!(error instanceof DOMException && error.name === 'AbortError')) showMessage('Sharing was not completed.', 'error');
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        showMessage(error instanceof Error ? error.message : 'Sharing was not completed.', 'error');
       }
     }
-    const url = URL.createObjectURL(file.data);
-    const printWindow = window.open(url, '_blank', 'noopener,noreferrer');
-    if (printWindow) {
-      printWindow.focus();
-      window.setTimeout(() => {
-        try { printWindow.print(); }
-        catch { showMessage('Printing was blocked by the browser. Please try again.', 'error'); }
-        window.setTimeout(() => {
-          try { printWindow.close(); }
-          catch { /* no-op */ }
-          URL.revokeObjectURL(url);
-        }, 1200);
-      }, 600);
-      return;
-    }
-    showMessage('Please allow pop-ups to print this file.', 'error');
-    return;
   }
 
-  const printWindow = window.open('', '_blank', 'noopener,noreferrer');
+  const url = URL.createObjectURL(file.data);
+  const printWindow = window.open(url, '_blank');
   if (!printWindow) {
+    URL.revokeObjectURL(url);
     showMessage('Please allow pop-ups to print this file.', 'error');
     return;
   }
-
-  const blobUrl = URL.createObjectURL(file.data);
-  printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${file.name}</title></head><body style="margin:0;display:flex;align-items:center;justify-content:center;background:#fff;min-height:100vh;"><img src="${blobUrl}" style="max-width:100%;max-height:100vh;object-fit:contain;" alt="${file.name}"></body></html>`);
-  printWindow.document.close();
-  printWindow.focus();
-  window.setTimeout(() => {
-    try { printWindow.print(); }
-    catch { showMessage('Printing was blocked by the browser. Please try again.', 'error'); }
-    window.setTimeout(() => {
-      try { printWindow.close(); }
-      catch { /* no-op */ }
-      URL.revokeObjectURL(blobUrl);
-    }, 1200);
-  }, 300);
+  printWindow.opener = null;
+  const cleanup = window.setInterval(() => {
+    if (printWindow.closed) {
+      window.clearInterval(cleanup);
+      URL.revokeObjectURL(url);
+    }
+  }, 1000);
 }
 
 function createCard(file: StoredFile): HTMLElement {
@@ -245,7 +237,8 @@ async function removeOne(file: StoredFile): Promise<void> {
 async function renderFiles(): Promise<void> {
   const host = document.querySelector<HTMLElement>('#tab-files');
   if (!host) return;
-  const files = (await listFiles()).filter((file) => file.name.toLowerCase().includes(query.toLowerCase()));
+  loadedFiles = await listFiles();
+  const files = loadedFiles.filter((file) => file.name.toLowerCase().includes(query.toLowerCase()));
   const grid = host.querySelector<HTMLElement>('.file-grid');
   if (!grid) return;
   grid.querySelectorAll<HTMLImageElement>('img[src^="blob:"]').forEach((image) => URL.revokeObjectURL(image.src));
@@ -314,9 +307,9 @@ export function renderFilesTab(): HTMLElement {
   });
   selectBar.append(selectAll, element('label', { text: 'Select all', attrs: { for: 'select-all' } }), element('span', { attrs: { id: 'selected-count' } }));
   selectBar.append(
-    button('Share selected', async () => {
-      const files = (await listFiles()).filter((file) => selected.has(file.id));
-      if (files.length) await shareFiles(files);
+    button('Share selected', () => {
+      const files = loadedFiles.filter((file) => selected.has(file.id));
+      if (files.length) void shareFiles(files);
     }, 'button button-secondary'),
     button('Remove selected', async () => {
       const files = (await listFiles()).filter((file) => selected.has(file.id));
