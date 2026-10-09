@@ -7,7 +7,7 @@ import { addLocalFiles, downloadBlob, exportZip, importZip } from './operations'
 const selected = new Set<string>();
 let selectMode = false;
 let query = '';
-let loadedFiles: StoredFile[] = [];
+let allFiles: StoredFile[] = [];
 
 function sizeLabel(size: number): string {
   return size < 1024 * 1024 ? `${(size / 1024).toFixed(0)} KB` : `${(size / (1024 * 1024)).toFixed(1)} MB`;
@@ -17,152 +17,172 @@ function syncLabel(file: StoredFile): string {
   return file.syncState === 'synced' ? 'Synced' : file.syncState === 'pending' ? 'Pending sync' : file.syncState === 'error' ? 'Sync error' : 'Local only';
 }
 
+function isIOS(): boolean {
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
 async function showPreview(file: StoredFile): Promise<void> {
-  const pdfTools = file.type === 'application/pdf' ? import('./pdf') : undefined;
+  const isPdf = file.type === 'application/pdf';
+  const pdfTools = isPdf ? import('./pdf') : undefined;
+
   const dialog = element('dialog', { className: 'preview-dialog' });
   const header = element('header', { className: 'preview-header' });
   const title = element('strong', { text: file.name });
   const close = button('Close', () => dialog.close(), 'button button-secondary');
   header.append(title, close);
+
   const controls = element('div', { className: 'preview-controls' });
   const canvasWrap = element('div', { className: 'pdf-canvas-wrap' });
+  const loading = element('p', { className: 'preview-loading', text: 'Loading file…' });
   const canvas = element('canvas');
-  canvasWrap.append(canvas);
+  canvas.hidden = true;
+  canvasWrap.append(loading, canvas);
+
   let page = 1;
   let count = 1;
   let scale = 1;
-  let controlButtons: HTMLButtonElement[] = [];
-  let isDrawing = false;
-  let redrawRequested = false;
-  const label = element('span', { text: 'Loading file…' });
-  const draw = async () => {
-    if (isDrawing) {
-      redrawRequested = true;
+  let loaded = false;
+  let busy = false;
+  let dirty = false;
+  const label = element('span', { text: 'Loading…' });
+  const controlButtons: HTMLButtonElement[] = [];
+  const control = (text: string, onClick: () => void): HTMLButtonElement => {
+    const b = button(text, onClick, 'button button-secondary') as HTMLButtonElement;
+    b.disabled = true;
+    controlButtons.push(b);
+    return b;
+  };
+
+  const renderCurrent = async (): Promise<void> => {
+    if (isPdf) {
+      const tools = await pdfTools!;
+      count = await tools.renderPdfPage(file.data, page, canvas, scale);
+      label.textContent = `Page ${page} of ${count}`;
       return;
     }
-    isDrawing = true;
-    controlButtons.forEach((control) => { control.disabled = true; });
+    const image = new Image();
+    const url = URL.createObjectURL(file.data);
     try {
-      do {
-        redrawRequested = false;
-        if (file.type === 'application/pdf') {
-          if (!pdfTools) throw new Error('PDF preview is unavailable.');
-          count = await (await pdfTools).renderPdfPage(file.data, page, canvas, scale);
-          label.textContent = `Page ${page} of ${count}`;
-        } else {
-          const image = new Image();
-          const imageUrl = URL.createObjectURL(file.data);
-          try {
-            image.src = imageUrl;
-            await image.decode();
-            canvas.width = image.naturalWidth;
-            canvas.height = image.naturalHeight;
-            canvas.style.width = `${Math.min(image.naturalWidth, window.innerWidth - 32) * scale}px`;
-            canvas.style.height = 'auto';
-            const context = canvas.getContext('2d');
-            if (!context) throw new Error('Canvas is unavailable.');
-            context.drawImage(image, 0, 0);
-            label.textContent = 'Image';
-          } finally {
-            URL.revokeObjectURL(imageUrl);
-          }
-        }
-      }
-      while (redrawRequested);
-    } catch (error) {
-      showMessage(error instanceof Error ? error.message : 'Unable to render this file.', 'error');
-      label.textContent = 'Unable to load file.';
+      image.src = url;
+      await image.decode();
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      canvas.style.width = `${Math.min(image.naturalWidth, window.innerWidth - 32) * scale}px`;
+      canvas.style.height = 'auto';
+      canvas.getContext('2d')?.drawImage(image, 0, 0);
+      label.textContent = 'Image';
     } finally {
-      isDrawing = false;
-      controlButtons.forEach((control) => { control.disabled = false; });
+      URL.revokeObjectURL(url);
     }
   };
-  controlButtons = [
-    button('−', () => { scale = Math.max(0.55, scale - 0.2); void draw(); }, 'button button-secondary'),
-    button('+', () => { scale = Math.min(3, scale + 0.2); void draw(); }, 'button button-secondary'),
-    button('Previous', () => { page = Math.max(1, page - 1); void draw(); }, 'button button-secondary'),
-    button('Next', () => { page = Math.min(count, page + 1); void draw(); }, 'button button-secondary')
-  ];
+
+  const draw = async (): Promise<void> => {
+    if (busy) { dirty = true; return; }
+    busy = true;
+    controlButtons.forEach((b) => { b.disabled = true; });
+    if (!loaded) { loading.textContent = 'Loading file…'; loading.hidden = false; }
+    try {
+      do {
+        dirty = false;
+        await renderCurrent();
+        loaded = true;
+        canvas.hidden = false;
+        canvas.style.transform = '';
+      } while (dirty);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to render this file.';
+      if (!loaded) loading.textContent = 'Unable to load this file.';
+      showMessage(message, 'error');
+    } finally {
+      busy = false;
+      loading.hidden = loaded;
+      controlButtons.forEach((b) => { b.disabled = !loaded; });
+    }
+  };
+
   controls.append(
-    controlButtons[0],
+    control('−', () => { scale = Math.max(0.55, scale - 0.2); void draw(); }),
     label,
-    controlButtons[1],
-    controlButtons[2],
-    controlButtons[3]
+    control('+', () => { scale = Math.min(3, scale + 0.2); void draw(); }),
+    control('Previous', () => { page = Math.max(1, page - 1); void draw(); }),
+    control('Next', () => { page = Math.min(count, page + 1); void draw(); })
   );
-  dialog.append(header, controls, canvasWrap);
-  document.body.append(dialog);
-  dialog.addEventListener('close', () => dialog.remove(), { once: true });
-  dialog.showModal();
-  await draw();
 
   let initialDistance = 0;
-  let initialScale = scale;
+  let initialScale = 1;
+  const distanceBetweenTouches = (event: TouchEvent): number =>
+    Math.hypot(event.touches[0].clientX - event.touches[1].clientX, event.touches[0].clientY - event.touches[1].clientY);
   canvasWrap.addEventListener('touchstart', (event) => {
-    if (event.touches.length === 2) {
-      initialDistance = Math.hypot(event.touches[0].clientX - event.touches[1].clientX, event.touches[0].clientY - event.touches[1].clientY);
+    if (loaded && event.touches.length === 2) {
+      initialDistance = distanceBetweenTouches(event);
       initialScale = scale;
     }
   }, { passive: true });
   canvasWrap.addEventListener('touchmove', (event) => {
     if (event.touches.length !== 2 || !initialDistance) return;
     event.preventDefault();
-    const distance = Math.hypot(event.touches[0].clientX - event.touches[1].clientX, event.touches[0].clientY - event.touches[1].clientY);
-    scale = Math.max(0.55, Math.min(3, initialScale * distance / initialDistance));
+    scale = Math.max(0.55, Math.min(3, initialScale * distanceBetweenTouches(event) / initialDistance));
+    canvas.style.transformOrigin = 'top left';
+    canvas.style.transform = `scale(${scale / initialScale})`;
   }, { passive: false });
   canvasWrap.addEventListener('touchend', () => {
     if (initialDistance) void draw();
     initialDistance = 0;
   });
+
+  dialog.append(header, controls, canvasWrap);
+  document.body.append(dialog);
+  dialog.addEventListener('close', () => dialog.remove(), { once: true });
+  dialog.showModal();
+  await draw();
 }
 
-async function shareFiles(files: StoredFile[]): Promise<void> {
-  const attachments = files.map((file) => new File([file.data], file.name, { type: file.type }));
-  if (navigator.share && navigator.canShare?.({ files: attachments })) {
-    try {
-      await navigator.share({ files: attachments, title: 'Exercise files' });
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return;
-      for (const file of files) downloadBlob(file.data, file.name);
-      const reason = error instanceof Error ? error.message : 'Sharing was not completed.';
-      showMessage(`${reason} The selected file(s) were downloaded instead.`, 'error');
-    }
-    return;
-  }
-
-  for (const file of files) downloadBlob(file.data, file.name);
-  showMessage('This browser cannot share file attachments. The selected file(s) were downloaded.', 'info');
+function shareFiles(files: StoredFile[]): void {
+  if (!files.length) return;
+  const subject = files.length === 1 ? `Exercise file: ${files[0].name}` : `Exercise files (${files.length})`;
+  const body = `Files to attach:\r\n\r\n${files.map((file) => `- ${file.name}`).join('\r\n')}\r\n`;
+  const link = document.createElement('a');
+  link.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  showMessage(`Your mail app was opened. Please attach the file${files.length === 1 ? '' : 's'} manually.`, 'info');
 }
 
-async function printFile(file: StoredFile): Promise<void> {
-  const isMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-  if (isMobile) {
-    if (navigator.share && navigator.canShare?.({ files: [new File([file.data], file.name, { type: file.type })] })) {
-      try {
-        await navigator.share({ files: [new File([file.data], file.name, { type: file.type })], title: 'Print file' });
-        showMessage('Choose Print from the sharing sheet.', 'info');
-        return;
-      } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') return;
-        showMessage(error instanceof Error ? error.message : 'Sharing was not completed.', 'error');
-      }
-    }
+async function iosShareSheet(file: StoredFile): Promise<boolean> {
+  const shareable = new File([file.data], file.name, { type: file.type });
+  if (!navigator.share || !navigator.canShare?.({ files: [shareable] })) return false;
+  try {
+    await navigator.share({ files: [shareable], title: 'Print file' });
+    showMessage('Choose Print from the sharing sheet.', 'info');
+    return true;
+  } catch (error) {
+    return error instanceof DOMException && error.name === 'AbortError';
   }
+}
 
-  const url = URL.createObjectURL(file.data);
-  const printWindow = window.open(url, '_blank');
-  if (!printWindow) {
+function openInTab(file: StoredFile): void {
+  const type = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : '');
+  const url = URL.createObjectURL(new Blob([file.data], { type }));
+  const tab = window.open(url, '_blank');
+  if (!tab) {
     URL.revokeObjectURL(url);
-    showMessage('Please allow pop-ups to print this file.', 'error');
+    showMessage('Please allow pop-ups to open this file.', 'error');
     return;
   }
-  printWindow.opener = null;
-  const cleanup = window.setInterval(() => {
-    if (printWindow.closed) {
-      window.clearInterval(cleanup);
-      URL.revokeObjectURL(url);
-    }
-  }, 1000);
+  const timer = window.setInterval(() => {
+    if (!tab.closed) return;
+    window.clearInterval(timer);
+    URL.revokeObjectURL(url);
+  }, 5000);
+}
+
+function printFile(file: StoredFile): void {
+  if (isIOS()) {
+    void iosShareSheet(file).then((handled) => { if (!handled) openInTab(file); });
+    return;
+  }
+  openInTab(file);
 }
 
 function createCard(file: StoredFile): HTMLElement {
@@ -173,7 +193,7 @@ function createCard(file: StoredFile): HTMLElement {
   selection.addEventListener('change', () => {
     if (selection.checked) selected.add(file.id);
     else selected.delete(file.id);
-    renderFiles();
+    void renderFiles();
   });
   const preview = element('button', { className: 'thumbnail', attrs: { type: 'button', 'aria-label': `Preview ${file.name}` } });
   preview.addEventListener('click', () => { void showPreview(file); });
@@ -211,12 +231,12 @@ function createCard(file: StoredFile): HTMLElement {
   );
   const actions = element('div', { className: 'file-actions' });
   actions.append(
-    button('Share', () => { void shareFiles([file]); }, 'icon-button'),
-    button('Print', () => { void printFile(file); }, 'icon-button'),
+    button('Share', () => shareFiles([file]), 'icon-button'),
+    button('Print', () => printFile(file), 'icon-button'),
     button('Remove', () => { void removeOne(file); }, 'icon-button')
   );
   let pressTimer = 0;
-  card.addEventListener('touchstart', () => { pressTimer = window.setTimeout(() => { selectMode = true; selected.add(file.id); renderFiles(); }, 600); }, { passive: true });
+  card.addEventListener('touchstart', () => { pressTimer = window.setTimeout(() => { selectMode = true; selected.add(file.id); void renderFiles(); }, 600); }, { passive: true });
   card.addEventListener('touchend', () => window.clearTimeout(pressTimer));
   card.addEventListener('touchmove', () => window.clearTimeout(pressTimer), { passive: true });
   card.append(selection, preview, details, actions);
@@ -237,8 +257,8 @@ async function removeOne(file: StoredFile): Promise<void> {
 async function renderFiles(): Promise<void> {
   const host = document.querySelector<HTMLElement>('#tab-files');
   if (!host) return;
-  loadedFiles = await listFiles();
-  const files = loadedFiles.filter((file) => file.name.toLowerCase().includes(query.toLowerCase()));
+  allFiles = await listFiles();
+  const files = allFiles.filter((file) => file.name.toLowerCase().includes(query.toLowerCase()));
   const grid = host.querySelector<HTMLElement>('.file-grid');
   if (!grid) return;
   grid.querySelectorAll<HTMLImageElement>('img[src^="blob:"]').forEach((image) => URL.revokeObjectURL(image.src));
@@ -298,21 +318,18 @@ export function renderFilesTab(): HTMLElement {
   heading.append(title, toolbar);
   const selectBar = element('div', { className: 'selection-bar' });
   const selectAll = element('input', { attrs: { id: 'select-all', type: 'checkbox', 'aria-label': 'Select all files' } });
-  selectAll.addEventListener('change', async () => {
-    const files = await listFiles();
+  selectAll.addEventListener('change', () => {
     selectMode = true;
     selected.clear();
-    if (selectAll.checked) files.forEach((file) => selected.add(file.id));
+    if (selectAll.checked) allFiles.forEach((file) => selected.add(file.id));
     void renderFiles();
   });
   selectBar.append(selectAll, element('label', { text: 'Select all', attrs: { for: 'select-all' } }), element('span', { attrs: { id: 'selected-count' } }));
+  const selectedFiles = (): StoredFile[] => allFiles.filter((file) => selected.has(file.id));
   selectBar.append(
-    button('Share selected', () => {
-      const files = loadedFiles.filter((file) => selected.has(file.id));
-      if (files.length) void shareFiles(files);
-    }, 'button button-secondary'),
+    button('Share selected', () => shareFiles(selectedFiles()), 'button button-secondary'),
     button('Remove selected', async () => {
-      const files = (await listFiles()).filter((file) => selected.has(file.id));
+      const files = selectedFiles();
       if (!files.length || !confirmAction(`Remove ${files.length} selected files?`)) return;
       try {
         for (const file of files) {
