@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowDownAZ, ArrowUpDown, Check, ChevronRight, Code2, Download, FileArchive,
+  Activity, ArrowDownAZ, ArrowUpDown, ArrowUpRight, Check, ChevronRight, Code2, Download, FileArchive,
   File as FileIcon, FileAudio2, FileImage, FileText, FileVideo2, Folder, FolderOpen, Github, Grid2X2,
-  HardDrive, Info, LayoutGrid, List, LoaderCircle, LockKeyhole, MoreHorizontal, PanelTop,
+  HardDrive, Info, LayoutGrid, List, LoaderCircle, LockKeyhole, MoreHorizontal, PanelTop, ScanLine,
   Plus, Printer, Search, Settings, Share2, ShieldCheck, Trash2, Upload, X,
 } from 'lucide-react'
 
@@ -14,6 +14,39 @@ type Notice = { kind: 'error' | 'success'; text: string }
 const emptyForm: SettingsForm = { username: '', owner: '', repo: '', branch: 'main', token: '' }
 const API = 'https://api.github.com'
 const MAX_CONTENT_SIZE = 100 * 1024 * 1024
+const STORAGE_KEY = 'private-github-file-manager-connection'
+
+function isConfig(value: unknown): value is Config {
+  if (typeof value !== 'object' || value === null) return false
+  const candidate = value as Record<string, unknown>
+  return ['username', 'owner', 'repo', 'branch', 'token']
+    .every(key => typeof candidate[key] === 'string' && candidate[key] !== '')
+}
+
+function readSavedConfig(): { config: Config | null; error?: string } {
+  let saved: string | null
+  try {
+    saved = window.localStorage.getItem(STORAGE_KEY)
+  } catch {
+    return { config: null, error: 'Could not access browser storage. Connection settings cannot be restored.' }
+  }
+  if (!saved) return { config: null }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(saved)
+  } catch {
+    parsed = null
+  }
+  if (isConfig(parsed)) return { config: parsed }
+
+  try {
+    window.localStorage.removeItem(STORAGE_KEY)
+  } catch {
+    return { config: null, error: 'Saved connection settings are invalid and could not be cleared from browser storage.' }
+  }
+  return { config: null, error: 'Saved connection settings were invalid and have been cleared.' }
+}
 
 function apiError(message: string, status: number) {
   if (status === 401) return 'Token not accepted. Check that your fine-grained token is active.'
@@ -50,16 +83,18 @@ function fileIcon(name: string, size = 19) {
 }
 
 function App() {
-  const [config, setConfig] = useState<Config | null>(null)
-  const [form, setForm] = useState<SettingsForm>(emptyForm)
-  const [connected, setConnected] = useState(false)
+  const [savedConfig] = useState(readSavedConfig)
+  const [config, setConfig] = useState<Config | null>(savedConfig.config)
+  const [form, setForm] = useState<SettingsForm>(savedConfig.config ?? emptyForm)
+  const [connected, setConnected] = useState(Boolean(savedConfig.config))
+  const [activeTab, setActiveTab] = useState<'files' | 'anatomy'>('files')
   const [path, setPath] = useState('')
   const [entries, setEntries] = useState<Entry[]>([])
   const [query, setQuery] = useState('')
   const [sortBy, setSortBy] = useState<'name' | 'size'>('name')
   const [descending, setDescending] = useState(false)
   const [view, setView] = useState<'grid' | 'list'>('list')
-  const [notice, setNotice] = useState<Notice | null>(null)
+  const [notice, setNotice] = useState<Notice | null>(savedConfig.error ? { kind: 'error', text: savedConfig.error } : null)
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState('')
@@ -164,6 +199,7 @@ function App() {
       if (!repoData.private) throw new Error('This repository is public. Select a private repository to connect.')
       const branchResponse = await fetch(`${API}/repos/${encodeURIComponent(next.owner)}/${encodeURIComponent(next.repo)}/branches/${encodeURIComponent(next.branch)}`, { headers })
       if (!branchResponse.ok) throw new Error(apiError(branchResponse.statusText, branchResponse.status))
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
       setConfig(next)
       setConnected(true)
       setPath('')
@@ -177,14 +213,23 @@ function App() {
   }
 
   const disconnect = () => {
+    let storageError: string | null = null
+    try {
+      window.localStorage.removeItem(STORAGE_KEY)
+    } catch {
+      storageError = ' Could not clear the saved token from browser storage; it may be restored after reload.'
+    }
     setConfig(null)
     setForm(emptyForm)
     setConnected(false)
+    setActiveTab('files')
     setEntries([])
     setPath('')
     setPreview(null)
     setSettingsOpen(false)
-    setNotice({ kind: 'success', text: 'Disconnected. Your token has been cleared from memory.' })
+    setNotice(storageError
+      ? { kind: 'error', text: `Disconnected from this page.${storageError}` }
+      : { kind: 'success', text: 'Disconnected. Your saved token has been cleared from this browser.' })
   }
 
   const readBlob = async (entry: Entry) => {
@@ -347,15 +392,18 @@ function App() {
           <span>vault<span className="brand-dot">.</span><small>PRIVATE FILES</small></span>
         </a>
         <div className="side-label">WORKSPACE</div>
-        <button className="nav-item active" onClick={() => { setPath(''); if (config) void loadFolder('', config) }}>
+        <button className={`nav-item ${activeTab === 'files' ? 'active' : ''}`} onClick={() => { setActiveTab('files'); setPath(''); if (config) void loadFolder('', config) }}>
           <LayoutGrid size={18} /> File browser
         </button>
+        {connected && <button className={`nav-item ${activeTab === 'anatomy' ? 'active' : ''}`} onClick={() => setActiveTab('anatomy')}>
+          <Activity size={18} /> 3D Anatomy
+        </button>}
         <button className="nav-item" onClick={() => setSettingsOpen(true)}><Settings size={18} /> Settings</button>
         <div className="sidebar-bottom">
           <div className="secure-card">
             <span className="secure-icon"><ShieldCheck size={17} /></span>
             <strong>Your files stay yours</strong>
-            <p>Access stays in your browser. Your token is never stored on a server.</p>
+            <p>Your connection is saved in this browser, not on a server.</p>
             <span className="security-status"><span /> ENCRYPTED CONNECTION</span>
           </div>
           <div className="profile">
@@ -369,12 +417,20 @@ function App() {
       <main className="main">
         <header className="topbar">
           <div className="mobile-brand"><span className="brand-mark"><HardDrive size={18} /></span><b>vault<span className="brand-dot">.</span></b></div>
-          <div className="top-context"><span className="context-dot" /> PRIVATE WORKSPACE <ChevronRight size={14} /> <span>File browser</span></div>
+          <div className="top-context"><span className="context-dot" /> PRIVATE WORKSPACE <ChevronRight size={14} /> <span>{activeTab === 'anatomy' ? '3D Anatomy' : 'File browser'}</span></div>
           <div className="top-actions"><span className="online-pill"><span /> SECURE SESSION</span><button className="icon-button settings-shortcut" aria-label="Settings" onClick={() => setSettingsOpen(true)}><Settings size={19} /></button></div>
         </header>
+        {connected && <nav className="mobile-nav" aria-label="Workspace tabs">
+          <button className={activeTab === 'files' ? 'active' : ''} aria-pressed={activeTab === 'files'} onClick={() => { setActiveTab('files'); setPath(''); if (config) void loadFolder('', config) }}>
+            <LayoutGrid size={16} /> File browser
+          </button>
+          <button className={activeTab === 'anatomy' ? 'active' : ''} aria-pressed={activeTab === 'anatomy'} onClick={() => setActiveTab('anatomy')}>
+            <Activity size={16} /> 3D Anatomy
+          </button>
+        </nav>}
 
         <section className="content">
-          <div className="page-heading">
+          {activeTab === 'files' && <div className="page-heading">
             <div><div className="eyebrow">YOUR PERSONAL CLOUD</div><h1>File browser<span className="heading-period">.</span></h1><p className="subtitle">A quieter place for your important files.</p></div>
             <div className="heading-actions">
               {config && <button className="button secondary" onClick={() => void loadFolder(path)} disabled={busy}><ArrowUpDown size={16} /> Refresh</button>}
@@ -383,14 +439,52 @@ function App() {
               </button>
               <input ref={fileInput} type="file" multiple hidden onChange={event => void uploadFiles(event.target.files)} />
             </div>
-          </div>
+          </div>}
 
           {notice && <div className={`notice ${notice.kind}`} role="status"><span>{notice.kind === 'error' ? <Info size={17} /> : <Check size={17} />}{notice.text}</span><button aria-label="Dismiss notice" onClick={() => setNotice(null)}><X size={16} /></button></div>}
 
           {!connected ? (
             <section className="welcome-card">
               <div className="welcome-graphic"><div className="orbit orbit-one" /><div className="orbit orbit-two" /><div className="welcome-icon"><LockKeyhole size={26} /></div><div className="float-chip chip-one"><Github size={16} /></div><div className="float-chip chip-two"><ShieldCheck size={16} /></div></div>
-              <div className="welcome-copy"><span className="eyebrow">PRIVATE BY DESIGN</span><h2>Your files, your repository.</h2><p>Connect a private GitHub repository to browse, preview, and manage files from any device. Your access token stays in this browser session.</p><button className="button primary" onClick={() => setSettingsOpen(true)}><Github size={17} /> Connect your repository <ChevronRight size={16} /></button><div className="welcome-points"><span><Check size={14} /> No server-side storage</span><span><Check size={14} /> Fine-grained token</span></div></div>
+              <div className="welcome-copy"><span className="eyebrow">PRIVATE BY DESIGN</span><h2>Your files, your repository.</h2><p>Connect a private GitHub repository to browse, preview, and manage files from any device. Your access token is saved in this browser so you stay connected after a reload.</p><button className="button primary" onClick={() => setSettingsOpen(true)}><Github size={17} /> Connect your repository <ChevronRight size={16} /></button><div className="welcome-points"><span><Check size={14} /> No server-side storage</span><span><Check size={14} /> Fine-grained token</span></div></div>
+            </section>
+          ) : activeTab === 'anatomy' ? (
+            <section className="anatomy-page">
+              <div className="anatomy-hero">
+                <div className="anatomy-copy">
+                  <span className="anatomy-kicker"><span /> THE HUMAN BODY, REIMAGINED</span>
+                  <h1>Explore anatomy<br /><span>in a new dimension.</span></h1>
+                  <p>Step inside an immersive 3D anatomy experience. Rotate, zoom, and discover the body from every angle.</p>
+                  <a className="anatomy-launch" href="https://jintai3d.com/viewer/?model=z-anatomy" target="_blank" rel="noopener noreferrer">
+                    <ScanLine size={18} /> Launch 3D Anatomy <ArrowUpRight size={17} />
+                  </a>
+                  <div className="anatomy-note"><span className="anatomy-note-line" /> Opens the interactive viewer in a new tab</div>
+                </div>
+                <div className="anatomy-art" aria-label="Stylized anatomical illustration">
+                  <div className="anatomy-orbit anatomy-orbit-one" />
+                  <div className="anatomy-orbit anatomy-orbit-two" />
+                  <span className="anatomy-coordinate coordinate-top">FIG. 01 <i>—</i> HUMAN</span>
+                  <span className="anatomy-coordinate coordinate-bottom">INTERACTIVE <i>·</i> 3D MODEL</span>
+                  <svg className="anatomy-figure" viewBox="0 0 300 490" role="img" aria-hidden="true">
+                    <defs>
+                      <linearGradient id="bodyGlow" x1="0" x2="1" y1="0" y2="1">
+                        <stop offset="0" stopColor="#f3d8c6" />
+                        <stop offset="1" stopColor="#d99b80" />
+                      </linearGradient>
+                    </defs>
+                    <path className="body-shape" d="M150 43c-22 0-37 18-37 42 0 19 8 34 18 42l-3 22c-16 6-40 12-53 25-12 12-18 37-22 69l-13 91c-2 13 4 24 13 25 10 1 16-8 18-19l18-83 5 89-8 99c-1 12 5 20 14 20s15-7 17-18l18-91 13 0 18 91c2 11 8 18 17 18s15-8 14-20l-8-99 5-89 18 83c2 11 8 20 18 19 9-1 15-12 13-25l-13-91c-4-32-10-57-22-69-13-13-37-19-53-25l-3-22c10-8 18-23 18-42 0-24-15-42-37-42Z" />
+                    <path className="body-detail" d="M150 128v210m-27-178c-16 12-22 35-22 58 0 17 8 30 21 38m55-96c16 12 22 35 22 58 0 17-8 30-21 38m-55-13c13 10 36 10 54 0m-56 32c15 13 42 13 57 0m-56 34c14 11 41 11 55 0m-52 36c13 9 35 9 48 0m-40 43 15 0m19 0 15 0" />
+                    <path className="body-accent" d="M150 129c-13 0-21 12-21 26 0 13 8 20 21 20s21-7 21-20c0-14-8-26-21-26Zm-1 59v80m-20-30c10 8 31 8 42 0m-42 26c11 8 30 8 41 0" />
+                  </svg>
+                  <span className="anatomy-callout callout-one"><span /> MUSCULOSKELETAL</span>
+                  <span className="anatomy-callout callout-two"><span /> HUMAN FORM</span>
+                </div>
+              </div>
+              <div className="anatomy-bottom">
+                <div><span className="anatomy-bottom-icon"><ScanLine size={18} /></span><span><strong>Look closer</strong><small>Explore the body in 3D</small></span></div>
+                <div><span className="anatomy-bottom-icon"><Activity size={18} /></span><span><strong>Learn by exploring</strong><small>Move through the human form</small></span></div>
+                <span className="anatomy-credit">POWERED BY JINTAI 3D <ArrowUpRight size={13} /></span>
+              </div>
             </section>
           ) : (
             <>
@@ -445,7 +539,7 @@ function App() {
             <button className="button primary connect-button" disabled={busy}>{busy ? <LoaderCircle className="spin" size={16} /> : <Github size={17} />}{busy ? 'Validating access…' : 'Validate & connect'}</button>
           </form>
           {config && <button className="disconnect-button" onClick={disconnect}><X size={15} /> Disconnect and clear token</button>}
-          <div className="modal-security"><LockKeyhole size={14} /> Token remains in memory only and is cleared when you disconnect or close this page.</div>
+          <div className="modal-security"><LockKeyhole size={14} /> Your token is saved in this browser's local storage and cleared when you disconnect. Anyone with access to this browser can inspect or use it.</div>
         </section>
       </div>}
 

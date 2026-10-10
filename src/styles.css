@@ -192,6 +192,44 @@ kbd { flex: 0 0 auto; padding: 2px 4px; border: 1px solid #eceef0; border-radius
 .file-table.grid .file-row:hover .row-actions { opacity: 1; }
 .file-table.grid .row-action { width: 26px; height: 26px; }
 .file-table.grid + .panel-footer { border-top: 1px solid var(--line); }
+.mobile-nav { display: none; }
+.anatomy-page { display: grid; gap: 15px; }
+.anatomy-hero { position: relative; display: grid; min-height: 490px; grid-template-columns: 1fr 1fr; overflow: hidden; border: 1px solid #e8e4df; border-radius: 16px; background: #f3f0eb; box-shadow: 0 12px 35px #34302b0a; }
+.anatomy-copy { z-index: 1; align-self: center; padding: 58px 15px 58px 55px; }
+.anatomy-kicker { display: inline-flex; align-items: center; gap: 9px; color: #9a705d; font-size: 9px; font-weight: 700; letter-spacing: 1.55px; }
+.anatomy-kicker > span { width: 7px; height: 7px; border-radius: 50%; background: #c18c71; box-shadow: 0 0 0 4px #c18c711c; }
+.anatomy-copy h1 { margin: 22px 0 13px; color: #27262a; font-size: clamp(36px, 4.4vw, 54px); font-weight: 600; letter-spacing: -2.8px; line-height: 1.1; }
+.anatomy-copy h1 span { color: #aa7963; }
+.anatomy-copy > p { max-width: 390px; margin: 0 0 27px; color: #77716e; font-size: 13px; line-height: 1.8; }
+.anatomy-launch { display: inline-flex; min-height: 48px; align-items: center; gap: 11px; padding: 0 17px; border: 1px solid #29272b; border-radius: 8px; background: #29272b; box-shadow: 0 7px 16px #29272b24; color: #fff; font-size: 12px; font-weight: 600; text-decoration: none; transition: background .16s, transform .16s, box-shadow .16s; }
+.anatomy-launch:hover { transform: translateY(-2px); background: #403a3a; box-shadow: 0 10px 20px #29272b30; }
+.anatomy-launch svg:last-child { margin-left: 4px; color: #e2b89e; }
+.anatomy-note { display: flex; align-items: center; gap: 9px; margin-top: 18px; color: #9a938d; font-size: 10px; }
+.anatomy-note-line { width: 22px; height: 1px; background: #c9a38f; }
+.anatomy-art { position: relative; display: grid; min-height: 490px; place-items: center; overflow: hidden; background: radial-gradient(ellipse at 49% 46%, #f7e6d7 0, #efdfd2 35%, #e7d6c9 68%, #dfcbbb 100%); }
+.anatomy-art::before, .anatomy-art::after { position: absolute; width: 1px; height: 78%; background: linear-gradient(transparent, #a9826b2e, transparent); content: ''; }
+.anatomy-art::after { transform: rotate(90deg); }
+.anatomy-orbit { position: absolute; width: 340px; height: 340px; border: 1px solid #98715b22; border-radius: 50%; }
+.anatomy-orbit-two { width: 430px; height: 430px; border-color: #98715b18; }
+.anatomy-figure { z-index: 1; width: min(68%, 285px); height: 90%; overflow: visible; filter: drop-shadow(0 15px 15px #694c3e25); }
+.body-shape { fill: url(#bodyGlow); stroke: #a96f58; stroke-width: 1.3; }
+.body-detail { fill: none; stroke: #995e4d; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; opacity: .66; }
+.body-accent { fill: none; stroke: #bd7a60; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.4; opacity: .82; }
+.anatomy-coordinate { position: absolute; z-index: 2; color: #936e5e; font-size: 8px; font-weight: 700; letter-spacing: 1.15px; }
+.anatomy-coordinate i { margin: 0 4px; color: #c39278; font-style: normal; }
+.coordinate-top { top: 27px; left: 29px; }
+.coordinate-bottom { right: 27px; bottom: 26px; }
+.anatomy-callout { position: absolute; z-index: 2; display: flex; align-items: center; gap: 7px; color: #98745f; font-size: 7px; font-weight: 700; letter-spacing: .9px; }
+.anatomy-callout span { width: 5px; height: 5px; border: 1px solid #ad8068; border-radius: 50%; background: #f2dfd0; box-shadow: 0 0 0 3px #ad80681a; }
+.callout-one { top: 33%; right: 9%; }
+.callout-two { bottom: 29%; left: 8%; }
+.anatomy-bottom { display: flex; min-height: 76px; align-items: center; gap: 33px; padding: 13px 20px; border: 1px solid #ebe8e4; border-radius: 11px; background: #fff; }
+.anatomy-bottom > div { display: flex; align-items: center; gap: 10px; }
+.anatomy-bottom-icon { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid #eee4dd; border-radius: 10px; background: #fbf6f2; color: #a77962; }
+.anatomy-bottom > div > span:last-child { display: grid; gap: 4px; }
+.anatomy-bottom strong { color: #414047; font-size: 10px; font-weight: 600; }
+.anatomy-bottom small { color: #969198; font-size: 9px; }
+.anatomy-credit { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; color: #9a9693; font-size: 8px; font-weight: 700; letter-spacing: .8px; }
 
 @media (max-width: 1050px) {
   .sidebar { width: 218px; padding-right: 15px; padding-left: 15px; }
@@ -209,6 +247,9 @@ kbd { flex: 0 0 auto; padding: 2px 4px; border: 1px solid #eceef0; border-radius
   .top-context { display: none; }
   .top-actions { gap: 7px; }
   .online-pill { padding: 6px 8px; font-size: 7px; }
+  .mobile-nav { display: flex; gap: 8px; padding: 9px 20px 0; border-bottom: 1px solid var(--line); background: #fff; }
+  .mobile-nav button { display: flex; min-height: 37px; align-items: center; gap: 7px; padding: 0 10px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #7c8590; font-size: 10px; cursor: pointer; }
+  .mobile-nav button.active { border-bottom-color: #19866c; color: #19765f; font-weight: 600; }
   .content { padding: 29px 20px 17px; }
   .page-heading { align-items: flex-start; flex-direction: column; gap: 15px; margin-bottom: 20px; }
   .heading-actions { width: 100%; }
@@ -243,11 +284,21 @@ kbd { flex: 0 0 auto; padding: 2px 4px; border: 1px solid #eceef0; border-radius
   .panel-footer { padding: 0 11px; font-size: 8px; }
   .panel-footer > span:last-child { font-size: 7px; }
   .page-footer { margin-top: 28px; font-size: 7px; }
+  .anatomy-hero { grid-template-columns: 1fr; }
+  .anatomy-copy { padding: 35px 27px 24px; }
+  .anatomy-copy h1 { margin-top: 16px; font-size: clamp(36px, 9vw, 48px); }
+  .anatomy-art { min-height: 355px; }
+  .anatomy-figure { width: min(60%, 225px); }
+  .anatomy-orbit { width: 250px; height: 250px; }
+  .anatomy-orbit-two { width: 320px; height: 320px; }
+  .anatomy-bottom { align-items: flex-start; flex-direction: column; gap: 15px; padding: 16px; }
+  .anatomy-credit { margin: 2px 0 0; }
 }
 @media (max-width: 420px) {
   .content { padding-right: 13px; padding-left: 13px; }
   .topbar { padding-right: 13px; padding-left: 13px; }
   .top-actions .icon-button { width: 30px; }
+  .mobile-nav { padding-right: 13px; padding-left: 13px; }
   .heading-actions { gap: 6px; }
   .button { gap: 6px; padding: 0 10px; font-size: 10px; }
   .table-head { grid-template-columns: minmax(90px, 1fr) 43px 0 105px; padding: 0 7px; }
@@ -256,4 +307,8 @@ kbd { flex: 0 0 auto; padding: 2px 4px; border: 1px solid #eceef0; border-radius
   .file-icon { width: 23px; height: 23px; }
   .settings-modal { padding: 20px 18px 16px; }
   .field-pair { grid-template-columns: 1fr; gap: 0; }
+  .anatomy-copy { padding-right: 19px; padding-left: 19px; }
+  .anatomy-art { min-height: 310px; }
+  .callout-one { right: 4%; }
+  .callout-two { left: 4%; }
 }
