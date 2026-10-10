@@ -347,7 +347,15 @@ function App() {
       }
       saveBlob(blob, entry.name)
       const subject = encodeURIComponent(`Sharing ${entry.name}`)
-      const body = encodeURIComponent(`I downloaded "${entry.name}". Please attach the downloaded file to this email.`)
+      const body = encodeURIComponent(`Please find the attached artwork: "${entry.name}".
+
+Copyright Notice:
+This artwork is an original creation. All rights reserved.
+Reproduction, redistribution, modification, or commercial use without the creator's prior written permission is prohibited.
+
+Please do not upload, share, or contribute this artwork to other platforms or repositories without permission.
+
+Thank you for respecting the creator's work.`)
       window.location.href = `mailto:?subject=${subject}&body=${body}`
       setNotice({ kind: 'success', text: 'File downloaded. Attach it to the email draft to share it.' })
     } catch (error) {
